@@ -20,7 +20,7 @@
 
 set -uo pipefail
 
-SCRIPT_VERSION="2027.3"
+SCRIPT_VERSION="2027.4"
 LOG=/var/log/systems-software-setup.log
 HOSTNAME_WANTED="systems-software"
 IMAGES=("docker.io/library/alpine" "docker.io/library/python:3-slim")
@@ -270,6 +270,7 @@ cat > "$TOOLS/break-mount.sh" <<'LAB_TOOL_END'
 #   sudo bash break-mount.sh            set up (default fault: wrong UUID)
 #   VARIANT=2 sudo -E bash break-mount.sh   fault: mount point missing
 #   VARIANT=3 sudo -E bash break-mount.sh   fault: wrong filesystem type
+#   VARIANT=4 sudo -E bash break-mount.sh   fault: damaged filesystem (group descriptors)
 #   sudo bash break-mount.sh --remove   remove the scenario and its fstab line
 #
 # The fstab line always carries `nofail`, so a broken entry can never stop the
@@ -301,9 +302,44 @@ case "${VARIANT:-1}" in
   2) rmdir /srv/data
      echo "UUID=$UUID /srv/data ext4 defaults,nofail 0 2 # lab9" >> /etc/fstab ;;
   3) echo "UUID=$UUID /srv/data xfs defaults,nofail 0 2 # lab9" >> /etc/fstab ;;
+  4) losetup -d "$LOOP"     # damage the filesystem's group descriptors, then re-attach
+     dd if=/dev/urandom of="$IMG" bs=4096 seek=1 count=1 conv=notrunc status=none
+     LOOP=$(losetup --find --show "$IMG")
+     echo "UUID=$UUID /srv/data ext4 defaults,nofail 0 2 # lab9" >> /etc/fstab ;;
   *) echo "unknown VARIANT"; exit 1 ;;
 esac
 echo "Data disk is $LOOP. Scenario ready: the data disk should be mounted at /srv/data."
+LAB_TOOL_END
+cat > "$TOOLS/collect-mount-evidence.sh" <<'LAB_TOOL_END'
+#!/usr/bin/env bash
+# collect-mount-evidence.sh <mountpoint> <evidence-dir> — run with sudo.
+# Saves what an operator looks at when a mount fails, as plain files, so a
+# diagnostic script (or a colleague) can work from the evidence:
+#   fstab           a copy of /etc/fstab
+#   blkid.txt       the filesystems on every block device (sudo blkid)
+#   lsblk.txt       the block devices (lsblk -f)
+#   mountpoint.txt  ls -ld <mountpoint>   (an error if it does not exist)
+#   mount.txt       the output of trying to mount it, and the exit status
+#   findmnt.txt     what is mounted there afterwards (empty: nothing)
+#   dmesg.txt       the last 20 kernel messages
+# It tries the mount once (as `sudo mount -a` would for this entry); it
+# changes nothing else.
+set -u
+[ "$(id -u)" -eq 0 ] || { echo "run with sudo" >&2; exit 1; }
+mp="${1:?usage: sudo collect-mount-evidence.sh <mountpoint> <evidence-dir>}"
+out="${2:?usage: sudo collect-mount-evidence.sh <mountpoint> <evidence-dir>}"
+FSTAB="${FSTAB:-/etc/fstab}"      # staff testing only: another fstab file
+mkdir -p "$out"
+cp "$FSTAB" "$out/fstab"
+blkid -c /dev/null > "$out/blkid.txt" 2>&1
+lsblk -f > "$out/lsblk.txt" 2>&1
+ls -ld "$mp" > "$out/mountpoint.txt" 2>&1
+mount -T "$FSTAB" "$mp" > "$out/mount.txt" 2>&1
+echo "exit status: $?" >> "$out/mount.txt"
+findmnt -n "$mp" > "$out/findmnt.txt" 2>&1
+dmesg | tail -n 20 > "$out/dmesg.txt" 2>&1
+[ -n "${SUDO_USER:-}" ] && chown -R "$SUDO_USER:" "$out"
+echo "Evidence saved in $out"
 LAB_TOOL_END
 chmod 755 "$TOOLS"/*.sh
 ok "lab tools in $TOOLS"
