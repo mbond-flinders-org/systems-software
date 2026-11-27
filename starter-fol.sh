@@ -10,9 +10,9 @@
 #             Installs the desktop and the "inherited workstation".
 #             Then restart, log in, and wait for Firefox to open the page.
 #   2nd run:  sudo bash starter.sh
-#             Asks for your project number and subsystem, records the
+#             Asks for your FAN and subsystem, records the
 #             baseline and prints
-#             your BASELINE ID. Submit it on Canvas.
+#             your BASELINE ID. Put it in your write-up.
 #
 # Safe to run again if the 1st run stops part-way.
 # =============================================================================
@@ -52,7 +52,7 @@ UHOME=$(getent passwd "$U" | cut -d: -f6)
 ARCH=$(uname -m)
 case "$ARCH" in x86_64|aarch64) ;; *) fail "unsupported CPU architecture: $ARCH" ;; esac
 if [ -d /opt/systems-software ] || [ "$(hostname)" = "systems-software" ]; then
-  fail "this is your LAB VM. Make a NEW VM for the project (see the Student Spec, section 5). Your lab VM stays as it is."
+  fail "this is your LAB VM. Make a NEW VM for the project (see the Student Spec, section 4). Your lab VM stays as it is."
 fi
 HAVE_SYSTEMD=0; [ -d /run/systemd/system ] && HAVE_SYSTEMD=1
 mkdir -p "$STATE"
@@ -66,8 +66,9 @@ if [ -f "$STATE/STAGE" ] && [ "$(cat "$STATE/STAGE")" = installed ]; then
     /usr/local/bin/final-check --record-baseline 0; exit 0
   fi
   TEAM=""
-  while ! [[ "$TEAM" =~ ^[0-9]{1,3}$ ]]; do
-    read -r -p "Your project number (digits only, from Canvas): " TEAM
+  while ! [[ "$TEAM" =~ ^[a-z]{2,4}[0-9]{4}$ ]]; do
+    read -r -p "Your FAN (for example stud0123): " TEAM
+    TEAM=$(printf '%s' "$TEAM" | tr 'A-Z' 'a-z' | tr -d ' ')
   done
   echo "Your subsystem (you cannot change it later):"
   echo "  1  Boot and startup"
@@ -80,8 +81,8 @@ if [ -f "$STATE/STAGE" ] && [ "$(cat "$STATE/STAGE")" = installed ]; then
     case "$n" in 1) SUB=boot; SN="Boot and startup" ;; 2) SUB=packages; SN="Packages and dependencies" ;;
                  3) SUB=display; SN="Display and session" ;; 4) SUB=services; SN="Services and security" ;; esac
   done
-  read -r -p "Project $TEAM, $SN - is that correct? (y/n) " yn
-  [ "$yn" = y ] || fail "run the script again and type your project number and subsystem."
+  read -r -p "FAN $TEAM, $SN - is that correct? (y/n) " yn
+  [ "$yn" = y ] || fail "run the script again and type your FAN and subsystem."
   /usr/local/bin/final-check --record-baseline "$TEAM" "$SUB"
   exit $?
 fi
@@ -4352,6 +4353,7 @@ printf '%s %s %s %s %s %s %s %s\n' "$(date '+%Y-%m-%dT%H:%M:%S')" "$BOOT" "$TARG
 # ---------------------------------------------------------------------------
 if [ "${1:-}" = "--record-baseline" ]; then
   TEAM="${2:-}"; SUB="${3:-}"
+  [[ "$TEAM" =~ ^[a-z]{2,4}[0-9]{4}$ ]] || { say "Not a FAN: $TEAM (2-4 letters and 4 digits, for example stud0123)."; exit 1; }
   case "$SUB" in boot|packages|display|services) ;; *) say "Unknown subsystem: $SUB"; exit 1 ;; esac
   [ -n "$ASNOW" ] || { say "The find command is missing, so the attack surface cannot be measured."; exit 1; }
   if [ "$TARGET" != PASS ]; then
@@ -4361,7 +4363,7 @@ if [ "${1:-}" = "--record-baseline" ]; then
   fi
   RAND=$(head -c 3 /dev/urandom | od -An -tx1 | tr -d ' \n')
   CHK=$(hash B "$TEAM" "$RAND" "$SIZE" "$BTB" "$BOOT" "$ARCH" "${#PKGS[@]}" "${#UNITS[@]}" "$L2B" "$SUB" "$ASNOW" | cut -c1-6)
-  CODE=$(printf 'B%02d-%s-%s' "$((10#$TEAM))" "$RAND" "$CHK")
+  CODE="B-$TEAM-$RAND-$CHK"
   {
     echo "team=$TEAM"; echo "baseline_code=$CODE"; echo "rand=$RAND"
     echo "size=$SIZE"; echo "btb=$BTB"; echo "boot=$BOOT"; echo "arch=$ARCH"
@@ -4389,7 +4391,7 @@ if [ "${1:-}" = "--record-baseline" ]; then
   say "  BASELINE ID:      $CODE"
   say ""
   [ -n "$NOTE" ] && say "  Note recorded for staff: $NOTE."
-  say "Submit this baseline ID on Canvas now. You will see it again on your results card."
+  say "Write down this baseline ID and put it in your write-up. You will see it again on your results card."
   exit 0
 fi
 
@@ -4477,14 +4479,14 @@ MANIFEST=$(
 )
 FP=$(printf '%s\n' "$MANIFEST" | sha256sum | cut -c1-64)
 TCODE_RAW=$(hash R "$TEAM" "$BCODE" "$BSIZE" "$BBTB" "$BBOOT" "$BARCH" "$SIZE" "${MED:-0}" "$NB" "$PASSBOOTS" "$REBOOT" "$FP" "$VERSION" "$SUB" "$BAS" "${ASNOW:-}")
-TCODE=$(printf 'R%02d-%s-%s-%s' "$((10#$TEAM))" "${TCODE_RAW:0:4}" "${TCODE_RAW:4:4}" "${TCODE_RAW:8:4}")
+TCODE="R-$TEAM-${TCODE_RAW:0:4}-${TCODE_RAW:4:4}-${TCODE_RAW:8:4}"
 
 secs() { [ -n "$1" ] && printf '%d.%d s' $(( $1/CLK )) $(( ($1%CLK)*10/CLK )) || printf 'n/a'; }
 gib()  { printf '%d.%02d GiB' $(( $1/1073741824 )) $(( ($1%1073741824)*100/1073741824 )); }
 
 CARD=$(
   echo "=================== RESULTS CARD ==================="
-  echo "Distro Minimisation Project   Project $TEAM   $ARCH"
+  echo "Distro Minimisation Project   $TEAM   $ARCH"
   echo "Subsystem        $(subname "$SUB")"
   echo "----------------------------------------------------"
   printf 'Size now         %-11s baseline %s\n' "$(gib "$SIZE")" "$(gib "$BSIZE")"
@@ -4522,7 +4524,7 @@ say "Bands are provisional. Staff confirm them with the verify tool."
 # 7. Export
 # ---------------------------------------------------------------------------
 if [ "${1:-}" = "--export" ]; then
-  OUT="$DHOME/final-check-export-P$(printf '%02d' "$((10#$TEAM))")-$(date '+%Y%m%d-%H%M').txt"
+  OUT="$DHOME/final-check-export-$TEAM-$(date '+%Y%m%d-%H%M').txt"
   {
     echo "$CARD"
     echo "== CARD DATA =="
@@ -4539,7 +4541,7 @@ if [ "${1:-}" = "--export" ]; then
   chown "$DUID:$DGID" "$OUT" 2>/dev/null
   say ""
   say "Saved: $OUT"
-  say "Upload this file with your submission."
+  say "Put this file in your OneDrive folder, with your VM. Paste its contents into your submission PDF."
   if command -v fstrim >/dev/null 2>&1; then
     fstrim -a >/dev/null 2>&1 && say "Freed unused disk blocks (fstrim), so the VM export is smaller."
   fi
