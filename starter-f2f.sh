@@ -51,7 +51,7 @@ UHOME=$(getent passwd "$U" | cut -d: -f6)
 ARCH=$(uname -m)
 case "$ARCH" in x86_64|aarch64) ;; *) fail "unsupported CPU architecture: $ARCH" ;; esac
 if [ -d /opt/systems-software ] || [ "$(hostname)" = "systems-software" ]; then
-  fail "this is your LAB VM. Make a NEW VM for the project (see the Student Spec, section 4). Your lab VM stays as it is."
+  fail "this is your LAB VM. Make a NEW VM for the project (see the Student Spec, section 5). Your lab VM stays as it is."
 fi
 HAVE_SYSTEMD=0; [ -d /run/systemd/system ] && HAVE_SYSTEMD=1
 mkdir -p "$STATE"
@@ -4485,7 +4485,7 @@ if [ "${1:-}" = "--export" ]; then
   chown "$DUID:$DGID" "$OUT" 2>/dev/null
   say ""
   say "Saved: $OUT"
-  say "Upload this file with your team's submission."
+  say "Put this file in your team's OneDrive folder, with your VM."
   if command -v fstrim >/dev/null 2>&1; then
     fstrim -a >/dev/null 2>&1 && say "Freed unused disk blocks (fstrim), so the VM export is smaller."
   fi

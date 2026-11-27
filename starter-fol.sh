@@ -4541,7 +4541,7 @@ if [ "${1:-}" = "--export" ]; then
   chown "$DUID:$DGID" "$OUT" 2>/dev/null
   say ""
   say "Saved: $OUT"
-  say "Put this file in your OneDrive folder, with your VM. Paste its contents into your submission PDF."
+  say "Put this file in your OneDrive folder, with your VM."
   if command -v fstrim >/dev/null 2>&1; then
     fstrim -a >/dev/null 2>&1 && say "Freed unused disk blocks (fstrim), so the VM export is smaller."
   fi
